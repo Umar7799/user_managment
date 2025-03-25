@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
+import { io } from "socket.io-client";
 import Login from "./Login";
 import Register from "./Register";
+
+const socket = io("http://localhost:5000"); // 🔥 Connect to Socket.io
 
 const UserTable = () => {
   const [users, setUsers] = useState([]);
@@ -12,13 +15,19 @@ const UserTable = () => {
   useEffect(() => {
     if (isLoggedIn) {
       fetchUsers();
+      socket.on("usersUpdated", (updatedUsers) => {
+        setUsers(updatedUsers); // 🔥 Real-time updates
+      });
     }
+
+    return () => {
+      socket.off("usersUpdated"); // Cleanup on unmount
+    };
   }, [isLoggedIn]);
 
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem("token");
-
       if (!token) {
         setIsLoggedIn(false);
         return;
@@ -47,7 +56,7 @@ const UserTable = () => {
       setErrorMessage("Session expired. Please log in again.");
       setIsLoggedIn(false);
       localStorage.removeItem("token");
-      console.log(error)
+      console.log(error);
     }
   };
 
@@ -62,43 +71,40 @@ const UserTable = () => {
     if (selectedUsers.length === 0) return;
     try {
       const token = localStorage.getItem("token");
-  
+
       for (const userId of selectedUsers) {
         let url = `http://localhost:5000/api/users/${action}/${userId}`;
         let method = "PUT";
         let body = undefined;
-  
+
         if (action === "unblock") {
-          url = `http://localhost:5000/api/users/unblock/${userId}`;  // 🔥 FIXED: Added /:id
-          method = "PUT";
+          url = `http://localhost:5000/api/users/unblock/${userId}`;
         } else if (action === "delete") {
           url = `http://localhost:5000/api/users/delete/${userId}`;
           method = "DELETE";
         }
-  
+
         const response = await fetch(url, {
           method,
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: body ? JSON.stringify(body) : undefined,  // 🔥 FIXED: Only send body when needed
+          body: body ? JSON.stringify(body) : undefined,
         });
-  
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
           console.error(`❌ Error performing ${action} on user ${userId}: ${errorData.error}`);
-          continue; // Don't stop on the first failure
+          continue;
         }
       }
-  
-      fetchUsers();
+
       setSelectedUsers([]);
     } catch (error) {
       console.error(`❌ Error performing ${action}:`, error);
     }
   };
-  
 
   const toggleSelection = (userId) => {
     setSelectedUsers((prev) =>

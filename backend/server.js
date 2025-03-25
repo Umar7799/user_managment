@@ -4,19 +4,24 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const { Pool } = require("pg");
+const http = require("http"); // 🔥 Added
+const { Server } = require("socket.io"); // 🔥 Added
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app); // 🔥 Wrap Express with HTTP server
+const io = new Server(server, {
+  cors: {
+    origin: ["http://localhost:3000", "http://localhost:5173"], // Allow both ports
+    credentials: true,
+  },
+});
+
 app.use(express.json());
+app.use(cors());
 
-// ✅ Fixed CORS issue (Allow multiple origins)
-const corsOptions = {
-  origin: ["http://localhost:3000", "http://localhost:5173"], // Allow both ports
-  credentials: true,
-};
-app.use(cors(corsOptions));
-
+// Database connection
 const pool = new Pool({
   user: process.env.DB_USER || "postgres",
   host: process.env.DB_HOST || "localhost",
@@ -25,53 +30,26 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-// ✅ Middleware for JWT Authentication
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.header("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Access denied. No token provided." });
-  }
+// Socket.io connection
+io.on("connection", (socket) => {
+  console.log("⚡ A user connected:", socket.id);
 
-  const token = authHeader.split(" ")[1];
-  jwt.verify(token, process.env.JWT_SECRET || "your_secret_key", (err, user) => {
-    if (err) return res.status(403).json({ error: "Invalid token." });
-    req.user = user;
-    next();
+  socket.on("disconnect", () => {
+    console.log("❌ A user disconnected:", socket.id);
   });
-};
-
-// ✅ Register a New User
-app.post("/api/register", async (req, res) => {
-  const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: "Name, email, and password are required." });
-  }
-
-  try {
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Insert new user (status defaults to 'active')
-    await pool.query(
-      "INSERT INTO users (name, email, password, status, last_login) VALUES ($1, $2, $3, 'active', NOW())",
-      [name, email, hashedPassword]
-    );
-
-    res.status(201).json({ message: "User registered successfully!" });
-  } catch (error) {
-    console.error("Registration error:", error);
-
-    // Handle duplicate email error (unique index constraint)
-    if (error.code === "23505") {
-      return res.status(409).json({ error: "Email already exists." });
-    }
-
-    res.status(500).json({ error: "Could not register user." });
-  }
 });
 
-// ✅ User Login
+// Broadcast user updates
+const broadcastUsers = async () => {
+  try {
+    const users = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
+    io.emit("usersUpdated", users.rows); // 🔥 Send update to all clients
+  } catch (error) {
+    console.error("Error broadcasting users:", error);
+  }
+};
+
+// Login
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: "Email and password are required." });
@@ -86,22 +64,22 @@ app.post("/api/login", async (req, res) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) return res.status(401).json({ error: "Invalid email or password." });
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email },
-      process.env.JWT_SECRET || "your_secret_key",
-      { expiresIn: "1h" }
-    );
+    const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET || "your_secret_key", {
+      expiresIn: "1h",
+    });
 
     await pool.query("UPDATE users SET last_login = NOW() WHERE id = $1", [user.id]);
     res.json({ message: "Login successful!", token });
+
+    broadcastUsers(); // 🔥 Notify all clients about the login update
   } catch (error) {
     console.error("Login failed:", error);
     res.status(500).json({ error: "Login failed." });
   }
 });
 
-// ✅ Get All Users
-app.get("/api/users", authenticateToken, async (req, res) => {
+// Get all users
+app.get("/api/users", async (req, res) => {
   try {
     const users = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
     res.json({ users: users.rows });
@@ -111,26 +89,28 @@ app.get("/api/users", authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Block a User (Everyone can do this)
-app.put("/api/users/block/:id", authenticateToken, async (req, res) => {
+// Block a user
+app.put("/api/users/block/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query("UPDATE users SET status = 'blocked' WHERE id = $1 RETURNING id, name, status", [
       id,
     ]);
+
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
     res.json({ message: `User ${result.rows[0].name} has been blocked.`, user: result.rows[0] });
+
+    broadcastUsers(); // 🔥 Notify all clients
   } catch (error) {
     console.error("Error blocking user:", error);
     res.status(500).json({ error: "Could not block user." });
   }
 });
 
-// ✅ Unblock a User (Everyone can do this)
-app.put("/api/users/unblock/:id", authenticateToken, async (req, res) => {
+// Unblock a user
+app.put("/api/users/unblock/:id", async (req, res) => {
   const { id } = req.params;
-
   try {
     const result = await pool.query("UPDATE users SET status = 'active' WHERE id = $1 RETURNING id, name, status", [
       id,
@@ -139,30 +119,33 @@ app.put("/api/users/unblock/:id", authenticateToken, async (req, res) => {
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
     res.json({ message: `User ${result.rows[0].name} has been unblocked.`, user: result.rows[0] });
+
+    broadcastUsers(); // 🔥 Notify all clients
   } catch (error) {
     console.error("Error unblocking user:", error);
     res.status(500).json({ error: "Could not unblock user." });
   }
 });
 
-// ✅ Delete a User (Everyone can do this)
-app.delete("/api/users/delete/:id", authenticateToken, async (req, res) => {
+// Delete a user
+app.delete("/api/users/delete/:id", async (req, res) => {
   const { id } = req.params;
-
   try {
     const result = await pool.query("DELETE FROM users WHERE id = $1 RETURNING id, name", [id]);
 
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
     res.json({ message: `User ${result.rows[0].name} has been deleted.`, user: result.rows[0] });
+
+    broadcastUsers(); // 🔥 Notify all clients
   } catch (error) {
     console.error("Error deleting user:", error);
     res.status(500).json({ error: "Could not delete user." });
   }
 });
 
-// ✅ Start Server
+// Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
