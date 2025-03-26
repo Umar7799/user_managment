@@ -7,14 +7,26 @@ const socket = io("http://localhost:5000"); // Connect to backend WebSocket
 
 const UserTable = () => {
   const [users, setUsers] = useState([]);
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [showRegister, setShowRegister] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [token, setToken] = useState(localStorage.getItem("token"));
 
   useEffect(() => {
-    if (isLoggedIn) {
-      fetchUsers();
+    // Set token on mount (initial load)
+    const storedToken = localStorage.getItem("token");
+    setToken(storedToken);
+
+    if (storedToken) {
+      setIsLoggedIn(true);
+      fetchUsers(storedToken);
+    } else {
+      setIsLoggedIn(false);
+    }
+
+    // Setup socket listener
+    if (isLoggedIn && storedToken) {
       socket.on("usersUpdated", (updatedUsers) => {
         setUsers(updatedUsers);
       });
@@ -25,11 +37,9 @@ const UserTable = () => {
     };
   }, [isLoggedIn]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (storedToken) => {
     try {
-      const token = localStorage.getItem("token");
-
-      if (!token) {
+      if (!storedToken) {
         setIsLoggedIn(false);
         return;
       }
@@ -37,7 +47,7 @@ const UserTable = () => {
       const response = await fetch("http://localhost:5000/api/users", {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${storedToken}`,
         },
       });
 
@@ -57,7 +67,8 @@ const UserTable = () => {
       setErrorMessage("Session expired. Please log in again.");
       setIsLoggedIn(false);
       localStorage.removeItem("token");
-      console.log(error);
+      console.log(error)
+
     }
   };
 
@@ -66,24 +77,24 @@ const UserTable = () => {
     setIsLoggedIn(false);
     setShowRegister(false);
     setErrorMessage("");
+    setToken(null);  // Clear the token state
   };
 
   const handleAction = async (action) => {
-    if (selectedUsers.length === 0) return;
+    if (selectedUsers.length === 0 || !token) return;  // Check token validity
+  
     try {
-      const token = localStorage.getItem("token");
-
       for (const userId of selectedUsers) {
         let url = `http://localhost:5000/api/users/${action}/${userId}`;
         let method = "PUT";
-
+  
         if (action === "unblock") {
           url = `http://localhost:5000/api/users/unblock/${userId}`;
         } else if (action === "delete") {
           url = `http://localhost:5000/api/users/delete/${userId}`;
           method = "DELETE";
         }
-
+  
         const response = await fetch(url, {
           method,
           headers: {
@@ -91,34 +102,44 @@ const UserTable = () => {
             Authorization: `Bearer ${token}`,
           },
         });
-
+  
+        const data = await response.json();
+  
         if (response.status === 403) {
-          // 🔥 If user is blocked, log them out immediately
-          alert("You are blocked! Logging out...");
-          localStorage.removeItem("token");
-          setIsLoggedIn(false);
-          return;
+          // Check for blocked user scenario
+          if (data.error === "You are blocked. Action not allowed.") {
+            alert("You are blocked! Logging out...");
+            localStorage.removeItem("token");
+            setIsLoggedIn(false);
+            return;
+          } else if (data.error === "Invalid token") {
+            alert("Session expired or invalid. Logging out...");
+            localStorage.removeItem("token");
+            setIsLoggedIn(false);
+            return;
+          } else {
+            alert(`Action failed: ${data.error}`);
+          }
         }
-
+  
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-          console.error(`❌ Error performing ${action} on user ${userId}: ${errorData.error}`);
+          console.error(`Error performing ${action} on user ${userId}:`, data.error);
           continue;
         }
       }
-
+  
       setSelectedUsers([]);
     } catch (error) {
-      console.error(`❌ Error performing ${action}:`, error);
+      console.error(`Error performing ${action}:`, error);
     }
   };
+  
 
   const toggleSelection = (userId) => {
     setSelectedUsers((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
   };
-
   const isAllSelected = selectedUsers.length === users.length;
 
   return (
@@ -217,4 +238,3 @@ const UserTable = () => {
 };
 
 export default UserTable;
-

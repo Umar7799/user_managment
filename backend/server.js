@@ -53,10 +53,11 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader.split(" ")[1];
   jwt.verify(token, process.env.JWT_SECRET || "your_secret_key", (err, user) => {
     if (err) return res.status(403).json({ error: "Invalid token." });
-    req.user = user;
+    req.user = user;  // Add user info to request object
     next();
   });
 };
+
 
 // ✅ Middleware to check if a user is blocked
 const checkIfBlocked = async (req, res, next) => {
@@ -77,6 +78,8 @@ const checkIfBlocked = async (req, res, next) => {
     res.status(500).json({ error: "Server error." });
   }
 };
+
+
 
 // ✅ Register a New User
 app.post("/api/register", async (req, res) => {
