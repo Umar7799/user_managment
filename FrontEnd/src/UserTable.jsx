@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { io } from "socket.io-client";
+import io from "socket.io-client";
 import Login from "./Login";
 import Register from "./Register";
 
-const socket = io("http://localhost:5000"); // 🔥 Connect to Socket.io
+const socket = io("http://localhost:5000"); // Connect to backend WebSocket
 
 const UserTable = () => {
   const [users, setUsers] = useState([]);
@@ -16,18 +16,19 @@ const UserTable = () => {
     if (isLoggedIn) {
       fetchUsers();
       socket.on("usersUpdated", (updatedUsers) => {
-        setUsers(updatedUsers); // 🔥 Real-time updates
+        setUsers(updatedUsers);
       });
     }
 
     return () => {
-      socket.off("usersUpdated"); // Cleanup on unmount
+      socket.off("usersUpdated");
     };
   }, [isLoggedIn]);
 
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem("token");
+
       if (!token) {
         setIsLoggedIn(false);
         return;
@@ -75,7 +76,6 @@ const UserTable = () => {
       for (const userId of selectedUsers) {
         let url = `http://localhost:5000/api/users/${action}/${userId}`;
         let method = "PUT";
-        let body = undefined;
 
         if (action === "unblock") {
           url = `http://localhost:5000/api/users/unblock/${userId}`;
@@ -90,8 +90,14 @@ const UserTable = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: body ? JSON.stringify(body) : undefined,
         });
+
+        if (response.status === 403) {
+          // 🔥 If user is blocked, log them out immediately
+          localStorage.removeItem("token");
+          setIsLoggedIn(false);
+          return;
+        }
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
