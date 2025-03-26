@@ -94,6 +94,7 @@ const UserTable = () => {
 
         if (response.status === 403) {
           // 🔥 If user is blocked, log them out immediately
+          alert("You are blocked! Logging out...");
           localStorage.removeItem("token");
           setIsLoggedIn(false);
           return;
