@@ -82,19 +82,19 @@ const UserTable = () => {
 
   const handleAction = async (action) => {
     if (selectedUsers.length === 0 || !token) return;  // Check token validity
-  
+
     try {
       for (const userId of selectedUsers) {
         let url = `http://localhost:5000/api/users/${action}/${userId}`;
         let method = "PUT";
-  
+
         if (action === "unblock") {
           url = `http://localhost:5000/api/users/unblock/${userId}`;
         } else if (action === "delete") {
           url = `http://localhost:5000/api/users/delete/${userId}`;
           method = "DELETE";
         }
-  
+
         const response = await fetch(url, {
           method,
           headers: {
@@ -102,9 +102,9 @@ const UserTable = () => {
             Authorization: `Bearer ${token}`,
           },
         });
-  
+
         const data = await response.json();
-  
+
         if (response.status === 403) {
           // Check for blocked user scenario
           if (data.error === "You are blocked. Action not allowed.") {
@@ -121,19 +121,19 @@ const UserTable = () => {
             alert(`Action failed: ${data.error}`);
           }
         }
-  
+
         if (!response.ok) {
           console.error(`Error performing ${action} on user ${userId}:`, data.error);
           continue;
         }
       }
-  
+
       setSelectedUsers([]);
     } catch (error) {
       console.error(`Error performing ${action}:`, error);
     }
   };
-  
+
 
   const toggleSelection = (userId) => {
     setSelectedUsers((prev) =>
@@ -146,7 +146,11 @@ const UserTable = () => {
     <div className="p-4">
       {isLoggedIn ? (
         <>
-          <h2 className="text-xl font-semibold mb-4">User Management</h2>
+          <div className="pb-4 mb-4">
+            <h1 className="p-2 text-5xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 drop-shadow-lg">
+              User managment app
+            </h1>
+          </div>
           {errorMessage && <p className="text-red-500">{errorMessage}</p>}
 
           <button className="bg-red-500 text-white px-4 py-2 rounded mb-4" onClick={handleLogout}>
