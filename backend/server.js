@@ -7,7 +7,7 @@ const { Pool } = require("pg");
 const http = require("http");
 const { Server } = require("socket.io");
 
-dotenv.config();
+dotenv.config(); // Ensure dotenv is loaded
 
 const app = express();
 const server = http.createServer(app); // Needed for Socket.io
@@ -58,7 +58,6 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-
 // ✅ Middleware to check if a user is blocked
 const checkIfBlocked = async (req, res, next) => {
   try {
@@ -78,8 +77,6 @@ const checkIfBlocked = async (req, res, next) => {
     res.status(500).json({ error: "Server error." });
   }
 };
-
-
 
 // ✅ Register a New User
 app.post("/api/register", async (req, res) => {
@@ -196,7 +193,8 @@ app.delete("/api/users/delete/:id", authenticateToken, checkIfBlocked, async (re
 });
 
 // ✅ Start Server with WebSockets
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000; // Access port from .env or default to 5000
+console.log('Server will run on port:', process.env.PORT);  // Debugging the port
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
