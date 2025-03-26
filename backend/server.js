@@ -13,16 +13,25 @@ const app = express();
 const server = http.createServer(app); // Needed for Socket.io
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:5173"],
-    credentials: true,
+    // Allow multiple origins
+    origin: [
+      "http://localhost:3000", // Local development (frontend)
+      "http://localhost:5173", // Another local dev server, for example Vite
+      "https://user-managmen.netlify.app" // Production URL on Netlify
+    ],
+    credentials: true, // Allow credentials such as cookies to be sent
   },
 });
 
 app.use(express.json());
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:5173"],
-    credentials: true,
+    origin: [
+      "http://localhost:3000", // Local development (frontend)
+      "http://localhost:5173", // Another local dev server, for example Vite
+      "https://user-managmen.netlify.app" // Production URL on Netlify
+    ],
+    credentials: true, // Allow credentials such as cookies to be sent
   })
 );
 
