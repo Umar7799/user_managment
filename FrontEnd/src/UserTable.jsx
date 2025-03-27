@@ -3,7 +3,7 @@ import io from "socket.io-client";
 import Login from "./Login";
 import Register from "./Register";
 
-const socket = io("http://localhost:5000"); // Connect to backend WebSocket
+const socket = io("https://user-managment-backend-twn9.onrender.com"); // Connect to backend WebSocket
 
 const UserTable = () => {
   const [users, setUsers] = useState([]);
@@ -44,7 +44,7 @@ const UserTable = () => {
         return;
       }
 
-      const response = await fetch("http://localhost:5000/api/users", {
+      const response = await fetch("https://user-managment-backend-twn9.onrender.com/api/users", {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${storedToken}`,
