@@ -1,5 +1,5 @@
 const express = require("express");
-const bcrypt = require("bcryptjs"); // Use bcryptjs for better cloud compatibility
+const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -7,48 +7,40 @@ const { Pool } = require("pg");
 const http = require("http");
 const { Server } = require("socket.io");
 
-dotenv.config();
+dotenv.config(); // Ensure dotenv is loaded
 
 const app = express();
-const server = http.createServer(app);
+const server = http.createServer(app); // Needed for Socket.io
 const io = new Server(server, {
   cors: {
     origin: [
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "https://user-managmen.netlify.app"
+      "http://localhost:3000", // Local development (frontend)
+      "http://localhost:5173", // Another local dev server, for example Vite
+      "https://user-managmen.netlify.app" // Production URL on Netlify
     ],
-    credentials: true,
+    credentials: true, // Allow credentials such as cookies to be sent
   },
 });
 
 app.use(express.json());
-app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://user-managmen.netlify.app"
-  ],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000", // Local development (frontend)
+      "http://localhost:5173", // Another local dev server, for example Vite
+      "https://user-managmen.netlify.app" // Production URL on Netlify
+    ],
+    credentials: true, // Allow credentials such as cookies to be sent
+  })
+);
 
+// Use DATABASE_URL from .env or fallback to the original connection parameters
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false, // Required for Render.com
+    rejectUnauthorized: false, // For using SSL with the Render or other cloud-hosted databases
   },
 });
-
-pool.query("SELECT NOW()", (err, res) => {
-  if (err) {
-    console.error("Database connection error:", err);
-  } else {
-    console.log("✅ Connected to database! Current time:", res.rows[0].now);
-  }
-});
-
-
-
 
 // ✅ Middleware for JWT Authentication
 const authenticateToken = (req, res, next) => {
@@ -60,23 +52,30 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader.split(" ")[1];
   jwt.verify(token, process.env.JWT_SECRET || "your_secret_key", (err, user) => {
     if (err) return res.status(403).json({ error: "Invalid token." });
-    req.user = user;
+    req.user = user;  // Add user info to request object
     next();
   });
 };
 
-
-// ✅ Get All Users (for the UserTable component)
-app.get("/api/users", authenticateToken, async (req, res) => {
+// ✅ Middleware to check if a user is blocked
+const checkIfBlocked = async (req, res, next) => {
   try {
-    const result = await pool.query("SELECT id, name, email, last_login, status FROM users");
-    res.json({ users: result.rows });
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    res.status(500).json({ error: "Could not fetch users." });
-  }
-});
+    const userResult = await pool.query("SELECT status FROM users WHERE id = $1", [req.user.id]);
 
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    if (userResult.rows[0].status === "blocked") {
+      return res.status(403).json({ error: "You are blocked. Action not allowed." });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error checking block status:", error);
+    res.status(500).json({ error: "Server error." });
+  }
+};
 
 // ✅ Register a New User
 app.post("/api/register", async (req, res) => {
@@ -132,14 +131,27 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// ✅ Block User
-app.put("/api/users/block/:id", authenticateToken, async (req, res) => {
+// ✅ Get All Users
+app.get("/api/users", authenticateToken, async (req, res) => {
+  try {
+    const users = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
+    res.json({ users: users.rows });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Could not fetch users." });
+  }
+});
+
+// ✅ Apply `checkIfBlocked` to action routes
+app.put("/api/users/block/:id", authenticateToken, checkIfBlocked, async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query("UPDATE users SET status = 'blocked' WHERE id = $1 RETURNING *", [id]);
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
-    io.emit("usersUpdated");
+    const updatedUsers = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
+    io.emit("usersUpdated", updatedUsers.rows);
+
     res.json({ message: `User ${result.rows[0].name} has been blocked.` });
   } catch (error) {
     console.error("Error blocking user:", error);
@@ -147,14 +159,15 @@ app.put("/api/users/block/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Unblock User
-app.put("/api/users/unblock/:id", authenticateToken, async (req, res) => {
+app.put("/api/users/unblock/:id", authenticateToken, checkIfBlocked, async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query("UPDATE users SET status = 'active' WHERE id = $1 RETURNING *", [id]);
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
-    io.emit("usersUpdated");
+    const updatedUsers = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
+    io.emit("usersUpdated", updatedUsers.rows);
+
     res.json({ message: `User ${result.rows[0].name} has been unblocked.` });
   } catch (error) {
     console.error("Error unblocking user:", error);
@@ -162,14 +175,15 @@ app.put("/api/users/unblock/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Delete User
-app.delete("/api/users/delete/:id", authenticateToken, async (req, res) => {
+app.delete("/api/users/delete/:id", authenticateToken, checkIfBlocked, async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query("DELETE FROM users WHERE id = $1 RETURNING *", [id]);
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
-    io.emit("usersUpdated");
+    const updatedUsers = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
+    io.emit("usersUpdated", updatedUsers.rows);
+
     res.json({ message: `User ${result.rows[0].name} has been deleted.` });
   } catch (error) {
     console.error("Error deleting user:", error);
@@ -177,8 +191,9 @@ app.delete("/api/users/delete/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Start Server
-const PORT = process.env.PORT || 5000;
+// ✅ Start Server with WebSockets
+const PORT = process.env.PORT || 5000; // Access port from .env or default to 5000
+console.log('Server will run on port:', process.env.PORT);  // Debugging the port
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
