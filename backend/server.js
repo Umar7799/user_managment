@@ -48,6 +48,8 @@ pool.query("SELECT NOW()", (err, res) => {
 });
 
 
+
+
 // ✅ Middleware for JWT Authentication
 const authenticateToken = (req, res, next) => {
   const authHeader = req.header("Authorization");
@@ -62,6 +64,19 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+
+// ✅ Get All Users (for the UserTable component)
+app.get("/api/users", authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT id, name, email, last_login, status FROM users");
+    res.json({ users: result.rows });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Could not fetch users." });
+  }
+});
+
 
 // ✅ Register a New User
 app.post("/api/register", async (req, res) => {
