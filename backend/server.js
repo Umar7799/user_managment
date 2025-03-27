@@ -142,7 +142,7 @@ app.get("/api/users", authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Apply `checkIfBlocked` to action routes
+// ✅ Block User and Emit Socket Event for Real-Time Update
 app.put("/api/users/block/:id", authenticateToken, checkIfBlocked, async (req, res) => {
   const { id } = req.params;
   try {
@@ -150,7 +150,12 @@ app.put("/api/users/block/:id", authenticateToken, checkIfBlocked, async (req, r
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
     const updatedUsers = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
-    io.emit("usersUpdated", updatedUsers.rows);
+    io.emit("usersUpdated", updatedUsers.rows); // Broadcast the update to all connected clients
+
+    // Emit to the specific user if they are the one being blocked
+    if (req.user.id === id) {
+      io.to(req.socket.id).emit("blocked", { message: "You have been blocked. Logging out." });
+    }
 
     res.json({ message: `User ${result.rows[0].name} has been blocked.` });
   } catch (error) {
@@ -159,6 +164,7 @@ app.put("/api/users/block/:id", authenticateToken, checkIfBlocked, async (req, r
   }
 });
 
+// ✅ Unblock User
 app.put("/api/users/unblock/:id", authenticateToken, checkIfBlocked, async (req, res) => {
   const { id } = req.params;
   try {
@@ -166,7 +172,7 @@ app.put("/api/users/unblock/:id", authenticateToken, checkIfBlocked, async (req,
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
     const updatedUsers = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
-    io.emit("usersUpdated", updatedUsers.rows);
+    io.emit("usersUpdated", updatedUsers.rows); // Broadcast the update to all connected clients
 
     res.json({ message: `User ${result.rows[0].name} has been unblocked.` });
   } catch (error) {
@@ -175,6 +181,7 @@ app.put("/api/users/unblock/:id", authenticateToken, checkIfBlocked, async (req,
   }
 });
 
+// ✅ Delete User
 app.delete("/api/users/delete/:id", authenticateToken, checkIfBlocked, async (req, res) => {
   const { id } = req.params;
   try {
@@ -182,7 +189,7 @@ app.delete("/api/users/delete/:id", authenticateToken, checkIfBlocked, async (re
     if (result.rowCount === 0) return res.status(404).json({ error: "User not found." });
 
     const updatedUsers = await pool.query("SELECT id, name, email, last_login, status FROM users ORDER BY last_login DESC");
-    io.emit("usersUpdated", updatedUsers.rows);
+    io.emit("usersUpdated", updatedUsers.rows); // Broadcast the update to all connected clients
 
     res.json({ message: `User ${result.rows[0].name} has been deleted.` });
   } catch (error) {
