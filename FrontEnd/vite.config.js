@@ -7,12 +7,10 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:5000", // ✅ Change this after backend deployment
+        target: "https://user-managment-backend-twn9.onrender.com", // ✅ Change this after backend deployment
         changeOrigin: true,
         secure: false,
       },
     },
   },
 });
-
-// git remote add origin https://github.com/Umar7799/user_managment.git
