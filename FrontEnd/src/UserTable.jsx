@@ -3,7 +3,8 @@ import io from "socket.io-client";
 import Login from "./Login";
 import Register from "./Register";
 
-const socket = io("https://user-managment-backend-twn9.onrender.com"); // Connect to backend WebSocket
+// Update the WebSocket connection URL to the deployed backend
+const socket = io("https://user-managment-backend-twn9.onrender.com");
 
 const UserTable = () => {
   const [users, setUsers] = useState([]);
@@ -61,14 +62,14 @@ const UserTable = () => {
           throw new Error(data.error || "Unauthorized. Please log in again.");
         }
       } else {
-        setUsers(data.users);
+        // Sorting users by last login time in descending order
+        setUsers(data.users.sort((a, b) => new Date(b.last_login) - new Date(a.last_login)));
       }
     } catch (error) {
       setErrorMessage("Session expired. Please log in again.");
       setIsLoggedIn(false);
       localStorage.removeItem("token");
-      console.log(error)
-
+      console.log(error);
     }
   };
 
@@ -85,13 +86,13 @@ const UserTable = () => {
 
     try {
       for (const userId of selectedUsers) {
-        let url = `http://localhost:5000/api/users/${action}/${userId}`;
+        let url = `https://user-managment-backend-twn9.onrender.com/api/users/${action}/${userId}`;
         let method = "PUT";
 
         if (action === "unblock") {
-          url = `http://localhost:5000/api/users/unblock/${userId}`;
+          url = `https://user-managment-backend-twn9.onrender.com/api/users/unblock/${userId}`;
         } else if (action === "delete") {
-          url = `http://localhost:5000/api/users/delete/${userId}`;
+          url = `https://user-managment-backend-twn9.onrender.com/api/users/delete/${userId}`;
           method = "DELETE";
         }
 
@@ -133,7 +134,6 @@ const UserTable = () => {
       console.error(`Error performing ${action}:`, error);
     }
   };
-
 
   const toggleSelection = (userId) => {
     setSelectedUsers((prev) =>
