@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "https://user-managment-backend-twn9.onrender.com", // ✅ Change this after backend deployment
+        target: "http://localhost:5000", // ✅ Change this after backend deployment
         changeOrigin: true,
         secure: false,
       },
