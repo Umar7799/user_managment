@@ -21,22 +21,27 @@ const UserTable = () => {
   }, [isLoggedIn, navigate]);
 
   // Fetch users from the backend
+
   const fetchUsers = useCallback(async () => {
     setLoading(true); // Start loading
+
     try {
       const response = await fetch("https://user-managment-backend-twn9.onrender.com/api/users", {
+        method: 'GET',
         headers: {
           "Authorization": `Bearer ${token}`,
         },
+        credentials: 'include',  // Include credentials (cookies)
       });
       const data = await response.json();
       setUsers(data.users);
     } catch (error) {
       console.error("Error fetching users:", error);
-    } finally {
-      setLoading(false); // Stop loading
     }
   }, [token]);
+  
+
+
 
   useEffect(() => {
     if (isLoggedIn) {
