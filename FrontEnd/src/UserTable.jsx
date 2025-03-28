@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 
+// Initialize the socket connection
 const socket = io("https://user-managment-backend-twn9.onrender.com");
 
 const UserTable = () => {
@@ -9,15 +10,19 @@ const UserTable = () => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [isLoggedIn, setIsLoggedIn] = useState(!!token);
+  const [loading, setLoading] = useState(true); // Loading state to track data fetching
   const navigate = useNavigate();
 
+  // Redirect to login if user is not logged in
   useEffect(() => {
     if (!isLoggedIn) {
       navigate("/login");
     }
   }, [isLoggedIn, navigate]);
 
+  // Fetch users from the backend
   const fetchUsers = useCallback(async () => {
+    setLoading(true); // Start loading
     try {
       const response = await fetch("https://user-managment-backend-twn9.onrender.com/api/users", {
         headers: {
@@ -28,32 +33,41 @@ const UserTable = () => {
       setUsers(data.users);
     } catch (error) {
       console.error("Error fetching users:", error);
+    } finally {
+      setLoading(false); // Stop loading
     }
-  }, [token]); // Memoize based on token
+  }, [token]);
 
   useEffect(() => {
     if (isLoggedIn) {
       fetchUsers();
+
+      // Listen for real-time updates
       socket.on("usersUpdated", (updatedUsers) => {
-        setUsers(updatedUsers);
+        setUsers(updatedUsers); // Update the user list on any changes
       });
+
       socket.on("blocked", (data) => {
-        alert(data.message);
-        handleLogout();
+        alert(data.message); // Show blocked message
+        handleLogout(); // Log out the blocked user
       });
     }
+
+    // Cleanup the socket listeners when the component unmounts
     return () => {
       socket.off("usersUpdated");
       socket.off("blocked");
     };
-  }, [isLoggedIn, token, fetchUsers]);  // Now fetchUsers is memoized
+  }, [isLoggedIn, fetchUsers]);
 
+  // Logout function to clear the token and update state
   const handleLogout = () => {
     localStorage.removeItem("token");
     setIsLoggedIn(false);
     setToken(null);
   };
 
+  // Handle user actions (block, unblock, delete)
   const handleAction = async (action) => {
     if (selectedUsers.length === 0 || !token) return;
 
@@ -99,12 +113,13 @@ const UserTable = () => {
         }
       }
 
-      setSelectedUsers([]);
+      setSelectedUsers([]); // Clear selection after the action
     } catch (error) {
       console.error(`Error performing ${action}:`, error);
     }
   };
 
+  // Toggle selection of users in the table
   const toggleSelection = (userId) => {
     setSelectedUsers((prevSelectedUsers) =>
       prevSelectedUsers.includes(userId)
@@ -112,6 +127,11 @@ const UserTable = () => {
         : [...prevSelectedUsers, userId]
     );
   };
+
+  // Show loading indicator while fetching users
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div>
