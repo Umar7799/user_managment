@@ -22,7 +22,7 @@ const io = new Server(server, {
   },
 });
 
-app.use(express.json());
+
 app.use(
   cors({
     origin: [
@@ -33,6 +33,10 @@ app.use(
     credentials: true, // Allow credentials such as cookies to be sent
   })
 );
+
+// ✅ Handle Preflight OPTIONS Requests
+app.options("*", cors()); // This will handle preflight OPTIONS requests
+app.use(express.json());
 
 // Use DATABASE_URL from .env or fallback to the original connection parameters
 const pool = new Pool({
